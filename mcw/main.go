@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	"os"
 	"time"
 
 	"github.com/phoenixdevelops/go-wlroots/wlroots"
@@ -9,6 +11,8 @@ import (
 type Server struct {
 	display wlroots.Display
 	backend wlroots.Backend
+
+	seat wlroots.Seat
 
 	outputs []*Output
 }
@@ -29,9 +33,25 @@ func main() {
 	server.backend = wlroots.NewBackend(server.display)
 
 	server.backend.OnNewOutput(server.newOuput)
+	server.backend.Renderer().InitDisplay(server.display)
+
+	// configure seat
+	server.seat = wlroots.NewSeat(server.display, "seat0")
+
+	// setup socket for wayland clients to connect to
+	socket, err := server.display.AddSocketAuto()
+	if err != nil {
+		panic(err)
+	}
 
 	// start the backend
-	err := server.backend.Start()
+	err = server.backend.Start()
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Printf("Running compositor on wayland display '%s'\n", socket)
+	err = os.Setenv("WAYLAND_DISPLAY", socket)
 	if err != nil {
 		panic(err)
 	}
@@ -46,6 +66,8 @@ func (s *Server) newOuput(output wlroots.Output) {
 		lastFrame: time.Now(),
 		color:     [4]float32{1, 0, 0, 1},
 	}
+
+	output.CreateGlobal()
 
 	out.wlrOutput.OnDestroy(s.destroyOutput)
 	out.wlrOutput.OnFrame(s.drawFrame)
