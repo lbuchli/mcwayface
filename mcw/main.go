@@ -12,9 +12,12 @@ type Server struct {
 	display wlroots.Display
 	backend wlroots.Backend
 
-	seat wlroots.Seat
+	seat       wlroots.Seat
+	compositor wlroots.Compositor
+	xdgShell   wlroots.XDGShell
 
-	outputs []*Output
+	outputs  []*Output
+	surfaces []wlroots.XDGSurface
 }
 
 type Output struct {
@@ -37,6 +40,11 @@ func main() {
 
 	// configure seat
 	server.seat = wlroots.NewSeat(server.display, "seat0")
+
+	server.compositor = wlroots.NewCompositor(server.display, server.backend.Renderer())
+
+	server.xdgShell = wlroots.NewXDGShell(server.display)
+	server.xdgShell.OnNewSurface(server.handleNewSurface)
 
 	// setup socket for wayland clients to connect to
 	socket, err := server.display.AddSocketAuto()
@@ -64,7 +72,7 @@ func (s *Server) newOuput(output wlroots.Output) {
 	out := &Output{
 		wlrOutput: output,
 		lastFrame: time.Now(),
-		color:     [4]float32{1, 0, 0, 1},
+		color:     [4]float32{0, 0, 0, 1},
 	}
 
 	output.CreateGlobal()
@@ -108,35 +116,6 @@ func (s *Server) drawFrame(output wlroots.Output) {
 		panic("Could not find display!")
 	}
 
-	// calculate a color based on the time difference from the last frame
-	now := time.Now()
-	delta := now.Sub(mcwOut.lastFrame)
-	mcwOut.lastFrame = now
-	deltaS := float32(delta.Seconds())
-
-	for i := 0; i < 3; i++ {
-		// get the index of the next color
-		next := i + 1
-		if next == 3 {
-			next = 0
-		}
-
-		// if the next color is 0, increase
-		if mcwOut.color[next] == 0 {
-			mcwOut.color[i] += deltaS
-			if mcwOut.color[i] >= 1 {
-				mcwOut.color[next] = deltaS
-				mcwOut.color[i] = 1
-			}
-		} else { // decrease
-			mcwOut.color[i] -= deltaS
-			if mcwOut.color[i] <= 0 {
-				mcwOut.color[i] = 0
-			}
-		}
-	}
-	// end fancy color generation
-
 	width, height := output.EffectiveResolution()
 
 	// try to make the current output the current OpenGL context
@@ -153,6 +132,39 @@ func (s *Server) drawFrame(output wlroots.Output) {
 		G: mcwOut.color[2],
 	})
 
+	for _, surface := range s.surfaces {
+
+		surf := surface.Surface()
+		state := surf.CurrentState()
+
+		renderBox := &wlroots.Box{
+			X:      20,
+			Y:      20,
+			Width:  state.Width(),
+			Height: state.Height(),
+		}
+
+		matrix := &wlroots.Matrix{}
+		transformMatrix := output.TransformMatrix()
+		matrix.ProjectBox(renderBox, state.Transform(), 0, &transformMatrix)
+
+		renderer.RenderTextureWithMatrix(surf.Texture(), matrix, 1)
+		surf.SendFrameDone(time.Now())
+	}
+
 	output.SwapBuffers()
 	renderer.End()
+}
+
+func (s *Server) handleNewSurface(surface wlroots.XDGSurface) {
+	surface.OnDestroy(s.handleSurfaceDestroy)
+	s.surfaces = append(s.surfaces, surface)
+}
+
+func (s *Server) handleSurfaceDestroy(surface wlroots.XDGSurface) {
+	for i, sb := range s.surfaces {
+		if surface == sb {
+			s.surfaces = append(s.surfaces[:i], s.surfaces[i+1:]...)
+		}
+	}
 }
