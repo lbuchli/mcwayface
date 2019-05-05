@@ -9,7 +9,7 @@ with wlroots (or, in this case go-wlroots).
 The original blog series start [here](https://drewdevault.com/2018/02/17/Writing-a-Wayland-compositor-1.html)
 
 
-This port has it's own version of the blog series on the [wiki](https://github.com/phoenixdevelops/mcwayface/wiki)
+This port has it's own version of the blog series on the [wiki](https://github.com/lbuchli/mcwayface/wiki)
 
 
 Before reading the translation (or the original blog), you should read the wayland compositor

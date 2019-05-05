@@ -5,7 +5,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/phoenixdevelops/go-wlroots/wlroots"
+	"github.com/lbuchli/go-wlroots/wlroots"
 )
 
 type Server struct {
